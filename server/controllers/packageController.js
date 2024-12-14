@@ -3,7 +3,7 @@ import multer from "multer";
 
 export const getAllPackages = async (req, res) => {
     try {
-        const packages = await Package.find();
+        const packages = await Package.find().select('-image')
         res.status(200).json({
             success: true,
             message: 'Packages fetched successfully',
