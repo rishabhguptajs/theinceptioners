@@ -1,5 +1,4 @@
 import Package from "../models/Package.js";
-import multer from "multer";
 
 export const getAllPackages = async (req, res) => {
     try {
@@ -124,23 +123,38 @@ export const getPackageImage = async (req, res) => {
     try {
         const { id } = req.params;
 
-        if (!id) {
+        if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
             return res.status(400).json({
                 success: false,
-                message: 'Package ID is required'
+                message: 'Invalid package ID format'
             });
         }
 
         const packageData = await Package.findById(id);
 
-        if (!packageData || !packageData.image) {
-            return res.status(404).send('No image found');
+        if (!packageData) {
+            return res.status(404).json({
+                success: false,
+                message: 'Package not found'
+            });
         }
 
+        if (!packageData.image || !packageData.image.data) {
+            return res.status(404).json({
+                success: false,
+                message: 'No image found for this package'
+            });
+        }
+
+        res.set('Cache-Control', 'public, max-age=3600');
         res.contentType(packageData.image.contentType);
         res.send(packageData.image.data);
     } catch (error) {
-        res.status(500).send('Error retrieving image');
+        console.error('Error retrieving image:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error retrieving image'
+        });
     }
 }
 
@@ -225,30 +239,60 @@ export const searchPackages = async (req, res) => {
 
         if (minPrice || maxPrice) {
             query.price = {};
-            if (minPrice) query.price.$gte = Number(minPrice);
-            if (maxPrice) query.price.$lte = Number(maxPrice);
+            if (minPrice) {
+                const min = Number(minPrice);
+                if (isNaN(min) || min < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid minimum price'
+                    });
+                }
+                query.price.$gte = min;
+            }
+            if (maxPrice) {
+                const max = Number(maxPrice);
+                if (isNaN(max) || max < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid maximum price'
+                    });
+                }
+                if (minPrice && max < Number(minPrice)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Maximum price cannot be less than minimum price'
+                    });
+                }
+                query.price.$lte = max;
+            }
         }
 
         if (search) {
+            const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             query.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
+                { title: { $regex: sanitizedSearch, $options: 'i' } },
+                { description: { $regex: sanitizedSearch, $options: 'i' } }
             ];
         }
 
-        const packages = await Package.find(query);
+        const packages = await Package.find(query)
+            .select('-image')
+            .lean()
+            .limit(50);
 
         res.status(200).json({
             success: true,
             message: 'Packages fetched successfully',
-            packages
+            packages,
+            count: packages.length
         });
 
     } catch (error) {
         console.error('Error searching packages:', error);
         res.status(500).json({
             success: false,
-            message: 'Error searching packages'
+            message: 'Error searching packages',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -259,10 +303,14 @@ export const getPaginatedPackages = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const totalPackages = await Package.countDocuments();
-        const packages = await Package.find()
-            .skip(skip)
-            .limit(limit);
+        const [packages, totalPackages] = await Promise.all([
+            Package.find()
+                .select('-image')
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Package.countDocuments()
+        ]);
 
         res.status(200).json({
             success: true,

@@ -61,7 +61,7 @@ export const createBooking = async(req, res) => {
 
 export const getBookings = async(req, res) => {
     try {
-        const bookings = await Booking.find();
+        const bookings = await Booking.find().populate('package', 'title description price');
         res.status(200).json({
             success: true,
             message: 'Bookings fetched successfully',

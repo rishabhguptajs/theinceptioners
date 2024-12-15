@@ -18,21 +18,15 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// public routes
-router.get('/', getAllPackages);
+router.get('/search', searchPackages);
+router.get('/paginated', getPaginatedPackages);
+router.get('/:id/image', getPackageImage);
 router.get('/:id', getPackageById);
+router.get('/', getAllPackages);
 
-// admin routes
 router.post('/admin/packages', basicAuth, createPackage);
 router.put('/admin/packages/:id', basicAuth, updatePackage); 
 router.delete('/admin/packages/:id', basicAuth, deletePackage);
-
-// image routes
-router.get('/:id/image', getPackageImage);
 router.post('/admin/packages/:id/image', upload.single('image'), handlePackageImageUpload);
-
-// additional routes
-router.get('/search', searchPackages);
-router.get('/paginated', getPaginatedPackages);
 
 export default router;
