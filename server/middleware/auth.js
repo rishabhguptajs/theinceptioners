@@ -1,22 +1,26 @@
 export const basicAuth = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) {
-        return res.sendStatus(401); 
-    }
-
-    const [type, credentials] = authHeader.split(' ');
-    if (type !== 'Basic' || !credentials) {
-        return res.sendStatus(401); 
-    }
-
-    const [username, password] = Buffer.from(credentials, 'base64').toString().split(':');
-    
     const validUsername = 'admin';
-    const validPassword = 'password123';
+    const validPassword = 'admin123';
+    
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ 
+            success: false, 
+            message: 'Authentication required' 
+        });
+    }
+
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
+    const [username, password] = credentials.split(':');
 
     if (username === validUsername && password === validPassword) {
-        next(); 
+        next();
     } else {
-        res.sendStatus(401); 
+        res.status(401).json({ 
+            success: false, 
+            message: 'Invalid credentials' 
+        });
     }
 };
